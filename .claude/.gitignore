@@ -1,0 +1,4 @@
+# /review pipeline ephemeral state (per-run REVIEW_DIR scratch dirs from review-prep.sh)
+review-state/
+
+worktrees/
