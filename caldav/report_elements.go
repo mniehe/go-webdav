@@ -78,28 +78,30 @@ type paramFilterReq struct {
 
 // https://tools.ietf.org/html/rfc4791#section-9.7.5
 type textMatchReq struct {
-	XMLName         xml.Name        `xml:"urn:ietf:params:xml:ns:caldav text-match"`
-	Text            string          `xml:",chardata"`
-	Collation       string          `xml:"collation,attr,omitempty"`
-	NegateCondition negateCondition `xml:"negate-condition,attr,omitempty"`
+	XMLName         xml.Name `xml:"urn:ietf:params:xml:ns:caldav text-match"`
+	Text            string   `xml:",chardata"`
+	Collation       string   `xml:"collation,attr,omitempty"`
+	NegateCondition yesNo    `xml:"negate-condition,attr,omitempty"`
 }
 
-type negateCondition bool
+// yesNo is the (yes | no) attribute type RFC 4791 uses for negate-condition
+// and novalue.
+type yesNo bool
 
-func (nc *negateCondition) UnmarshalText(b []byte) error {
+func (v *yesNo) UnmarshalText(b []byte) error {
 	switch s := string(b); s {
 	case "yes":
-		*nc = true
+		*v = true
 	case "no":
-		*nc = false
+		*v = false
 	default:
-		return fmt.Errorf("caldav: invalid negate-condition value: %q", s)
+		return fmt.Errorf("caldav: invalid yes/no attribute value: %q", s)
 	}
 	return nil
 }
 
-func (nc negateCondition) MarshalText() ([]byte, error) {
-	if nc {
+func (v yesNo) MarshalText() ([]byte, error) {
+	if v {
 		return []byte("yes"), nil
 	}
 	return nil, nil
@@ -162,7 +164,7 @@ type expand struct {
 type prop struct {
 	XMLName xml.Name `xml:"urn:ietf:params:xml:ns:caldav prop"`
 	Name    string   `xml:"name,attr"`
-	// TODO: novalue
+	NoValue yesNo    `xml:"novalue,attr,omitempty"`
 }
 
 type reportReq struct {

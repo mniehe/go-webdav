@@ -25,7 +25,7 @@ type calendarCompRequest struct {
 	// AllProps requests every property of the component; Props names an
 	// explicit subset. RFC 4791 §9.6.1 makes the two mutually exclusive.
 	AllProps bool
-	Props    []string
+	Props    []calendarPropRequest
 
 	// AllComps requests every child component; Comps names an explicit subset
 	// with its own nested projection. Also mutually exclusive.
@@ -35,6 +35,14 @@ type calendarCompRequest struct {
 	// Expand, when set, asks for recurrence instances within a bounded window
 	// rather than the recurrence rule itself. See CalendarExpandRequest.
 	Expand *calendarExpandRequest
+}
+
+// calendarPropRequest names one property of a calendar-data projection
+// (RFC 4791 §9.6.4). NoValue asks for the property name and parameters with
+// the value data stripped.
+type calendarPropRequest struct {
+	Name    string
+	NoValue bool
 }
 
 // calendarExpandRequest is the CALDAV:expand window of a calendar-data request

@@ -188,6 +188,64 @@ func TestQueryProjectsRequestedProperties(t *testing.T) {
 	}
 }
 
+func TestQueryNoValueStripsTheRequestedValue(t *testing.T) {
+	store := newStore(t)
+	seedRaw(t, store, "alice", "august.ics", augustICS, "august")
+	h := handlerFor(t, store, caldav.Config{})
+
+	// RFC 4791 §9.6.4: novalue="yes" asks for the property name and parameters
+	// with a trailing ":" and no value data.
+	body := `<?xml version="1.0"?>
+<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop>
+    <C:calendar-data>
+      <C:comp name="VCALENDAR">
+        <C:comp name="VEVENT">
+          <C:prop name="UID"/>
+          <C:prop name="SUMMARY" novalue="yes"/>
+        </C:comp>
+      </C:comp>
+    </C:calendar-data>
+  </D:prop>
+  <C:filter><C:comp-filter name="VCALENDAR"/></C:filter>
+</C:calendar-query>`
+
+	data := reportMS(t, h, "/alice/work/", body).
+		at(t, "/alice/work/august.ics").value(t, caldavName("calendar-data"))
+
+	if !strings.Contains(data, "UID:august") {
+		t.Errorf("calendar-data = %q, want the requested UID with its value", data)
+	}
+	if !strings.Contains(data, "SUMMARY:") {
+		t.Errorf("calendar-data = %q, want the SUMMARY name to survive novalue", data)
+	}
+	if strings.Contains(data, "SUMMARY:August") {
+		t.Errorf("calendar-data = %q, novalue=yes must strip the value data", data)
+	}
+}
+
+func TestQueryNoValueRejectsAnUnknownValue(t *testing.T) {
+	store := newStore(t)
+	seedRaw(t, store, "alice", "august.ics", augustICS, "august")
+	h := handlerFor(t, store, caldav.Config{})
+
+	body := `<?xml version="1.0"?>
+<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop>
+    <C:calendar-data>
+      <C:comp name="VCALENDAR">
+        <C:comp name="VEVENT"><C:prop name="SUMMARY" novalue="maybe"/></C:comp>
+      </C:comp>
+    </C:calendar-data>
+  </D:prop>
+  <C:filter><C:comp-filter name="VCALENDAR"/></C:filter>
+</C:calendar-query>`
+
+	if w := report(t, h, "/alice/work/", body); w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d for a novalue that is neither yes nor no", w.Code, http.StatusBadRequest)
+	}
+}
+
 func TestQueryBoundsTheResultCount(t *testing.T) {
 	store := newStore(t)
 	seedRaw(t, store, "alice", "august.ics", augustICS, "august")

@@ -55,29 +55,37 @@ func projectComponent(comp *ical.Component, req *calendarCompRequest, keepRecurr
 
 	out := &ical.Component{Name: comp.Name, Props: make(ical.Props)}
 
-	keep := func(name string) bool {
+	keep := func(name string) (noValue, ok bool) {
+		for i := range req.Props {
+			if strings.EqualFold(req.Props[i].Name, name) {
+				return req.Props[i].NoValue, true
+			}
+		}
 		if req.AllProps {
-			return true
+			return false, true
 		}
 		if keepRecurrence && isRecurrenceProp(name) {
-			return true
-		}
-		for _, want := range req.Props {
-			if strings.EqualFold(want, name) {
-				return true
-			}
+			return false, true
 		}
 		for _, want := range requiredProps(comp.Name) {
 			if strings.EqualFold(want, name) {
-				return true
+				return false, true
 			}
 		}
-		return false
+		return false, false
 	}
 	for name, props := range comp.Props {
-		if keep(name) {
-			out.Props[name] = cloneProps(props)
+		noValue, ok := keep(name)
+		if !ok {
+			continue
 		}
+		cloned := cloneProps(props)
+		if noValue {
+			for i := range cloned {
+				cloned[i].Value = ""
+			}
+		}
+		out.Props[name] = cloned
 	}
 
 	for _, child := range comp.Children {

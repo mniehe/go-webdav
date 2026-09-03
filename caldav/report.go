@@ -129,7 +129,9 @@ func dataRequestFrom(prop *internal.Prop) (calendarCompRequest, error) {
 		return calendarCompRequest{AllProps: true, AllComps: true}, nil
 	}
 	if err != nil {
-		return calendarCompRequest{}, err
+		// The element being re-decoded is client XML, so a failure here is the
+		// request's fault, not the server's.
+		return calendarCompRequest{}, internal.HTTPErrorf(http.StatusBadRequest, "caldav: %v", err)
 	}
 	decoded, err := decodeCalendarDataReq(&raw)
 	if err != nil {

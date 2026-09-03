@@ -121,23 +121,25 @@ type propFilterReq struct {
 
 // textMatchReq is RFC 6352 §10.5.4.
 type textMatchReq struct {
-	XMLName         xml.Name        `xml:"urn:ietf:params:xml:ns:carddav text-match"`
-	Text            string          `xml:",chardata"`
-	Collation       string          `xml:"collation,attr,omitempty"`
-	NegateCondition negateCondition `xml:"negate-condition,attr,omitempty"`
-	MatchType       matchType       `xml:"match-type,attr,omitempty"`
+	XMLName         xml.Name  `xml:"urn:ietf:params:xml:ns:carddav text-match"`
+	Text            string    `xml:",chardata"`
+	Collation       string    `xml:"collation,attr,omitempty"`
+	NegateCondition yesNo     `xml:"negate-condition,attr,omitempty"`
+	MatchType       matchType `xml:"match-type,attr,omitempty"`
 }
 
-type negateCondition bool
+// yesNo is the (yes | no) attribute type RFC 6352 uses for negate-condition
+// and novalue.
+type yesNo bool
 
-func (nc *negateCondition) UnmarshalText(b []byte) error {
+func (v *yesNo) UnmarshalText(b []byte) error {
 	switch s := string(b); s {
 	case "yes":
-		*nc = true
+		*v = true
 	case "no":
-		*nc = false
+		*v = false
 	default:
-		return fmt.Errorf("carddav: invalid negate-condition value: %q", s)
+		return fmt.Errorf("carddav: invalid yes/no attribute value: %q", s)
 	}
 	return nil
 }
@@ -199,6 +201,7 @@ type addressDataReq struct {
 type propReq struct {
 	XMLName xml.Name `xml:"urn:ietf:params:xml:ns:carddav prop"`
 	Name    string   `xml:"name,attr"`
+	NoValue yesNo    `xml:"novalue,attr,omitempty"`
 }
 
 type reportReq struct {

@@ -58,7 +58,7 @@ func TestFilterProjectsRequestedProperties(t *testing.T) {
 			Name: "VCALENDAR",
 			Comps: []calendarCompRequest{{
 				Name:  "VEVENT",
-				Props: []string{"UID"},
+				Props: []calendarPropRequest{{Name: "UID"}},
 			}},
 		},
 	}
@@ -188,7 +188,7 @@ END:VCALENDAR
 			Name: "VCALENDAR",
 			Comps: []calendarCompRequest{{
 				Name:  "VEVENT",
-				Props: []string{"UID", "DTSTART", "SUMMARY"},
+				Props: []calendarPropRequest{{Name: "UID"}, {Name: "DTSTART"}, {Name: "SUMMARY"}},
 			}},
 			Expand: &calendarExpandRequest{
 				Start: utc(2026, time.January, 1, 0),

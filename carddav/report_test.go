@@ -314,6 +314,71 @@ func TestQueryProjectsRequestedProperties(t *testing.T) {
 	}
 }
 
+func TestQueryNoValueStripsTheRequestedValue(t *testing.T) {
+	h := handlerFor(t, abStore(t), carddav.Config{})
+
+	// RFC 6352 §10.4.2: novalue="yes" asks for the property name and parameters
+	// with the value data stripped.
+	body := `<?xml version="1.0"?>
+<C:addressbook-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav">
+  <D:prop>
+    <C:address-data>
+      <C:prop name="FN"/>
+      <C:prop name="EMAIL" novalue="yes"/>
+    </C:address-data>
+  </D:prop>
+  <C:filter><C:prop-filter name="FN"><C:text-match>lovelace</C:text-match></C:prop-filter></C:filter>
+</C:addressbook-query>`
+
+	data := reportMS(t, h, "/alice/work/", body).
+		at(t, "/alice/work/ada.vcf").value(t, carddavName("address-data"))
+
+	if !strings.Contains(data, "FN:Ada Lovelace") {
+		t.Errorf("address-data = %q, want the requested FN with its value", data)
+	}
+	if !strings.Contains(data, "EMAIL") {
+		t.Errorf("address-data = %q, want the EMAIL name to survive novalue", data)
+	}
+	if strings.Contains(data, "ada@example.com") {
+		t.Errorf("address-data = %q, novalue=yes must strip the value data", data)
+	}
+}
+
+func TestQueryNoValueDoesNotCorruptTheStoredCard(t *testing.T) {
+	h := handlerFor(t, abStore(t), carddav.Config{})
+
+	body := `<?xml version="1.0"?>
+<C:addressbook-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav">
+  <D:prop>
+    <C:address-data><C:prop name="EMAIL" novalue="yes"/></C:address-data>
+  </D:prop>
+  <C:filter><C:prop-filter name="FN"><C:text-match>lovelace</C:text-match></C:prop-filter></C:filter>
+</C:addressbook-query>`
+	reportMS(t, h, "/alice/work/", body)
+
+	// Blanking must happen on a copy: the store commonly hands out pointers
+	// into its own cache.
+	if got := do(h, http.MethodGet, "/alice/work/ada.vcf").Body.String(); got != adaVCF {
+		t.Errorf("stored bytes changed after a novalue query:\n%q", got)
+	}
+}
+
+func TestQueryNoValueRejectsAnUnknownValue(t *testing.T) {
+	h := handlerFor(t, abStore(t), carddav.Config{})
+
+	body := `<?xml version="1.0"?>
+<C:addressbook-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav">
+  <D:prop>
+    <C:address-data><C:prop name="EMAIL" novalue="maybe"/></C:address-data>
+  </D:prop>
+  <C:filter><C:prop-filter name="FN"/></C:filter>
+</C:addressbook-query>`
+
+	if w := report(t, h, "/alice/work/", body); w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d for a novalue that is neither yes nor no", w.Code, http.StatusBadRequest)
+	}
+}
+
 func TestQueryConvertsToTheRequestedVersion(t *testing.T) {
 	store := newStore(t)
 	seedRaw(t, store, "alice", "nova.vcf", novaV3VCF, "nova")

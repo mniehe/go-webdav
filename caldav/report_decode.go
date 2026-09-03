@@ -112,7 +112,7 @@ func decodeCompNode(comp *comp, nodes *int) (*calendarCompRequest, error) {
 		if err := countCompRequestNode(nodes, p.Name); err != nil {
 			return nil, err
 		}
-		req.Props = append(req.Props, p.Name)
+		req.Props = append(req.Props, calendarPropRequest{Name: p.Name, NoValue: bool(p.NoValue)})
 	}
 	for i := range comp.Comp {
 		decoded, err := decodeCompNode(&comp.Comp[i], nodes)

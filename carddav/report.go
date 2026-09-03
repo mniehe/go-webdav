@@ -133,7 +133,9 @@ func dataRequestFrom(prop *internal.Prop) (addressDataReq, error) {
 		return addressDataReq{}, nil
 	}
 	if err != nil {
-		return addressDataReq{}, err
+		// The element being re-decoded is client XML, so a failure here is the
+		// request's fault, not the server's.
+		return addressDataReq{}, internal.HTTPErrorf(http.StatusBadRequest, "carddav: %v", err)
 	}
 	if req.Allprop != nil && len(req.Props) > 0 {
 		return addressDataReq{}, internal.HTTPErrorf(http.StatusBadRequest, "carddav: only one of allprop or prop can be specified in address-data")
@@ -179,6 +181,24 @@ func copyCard(card vcard.Card) vcard.Card {
 	return out
 }
 
+// blankFields clones fields with their value data stripped (RFC 6352 §10.4.2
+// novalue), leaving the source — commonly the backend's own cache — untouched.
+func blankFields(fields []*vcard.Field) []*vcard.Field {
+	out := make([]*vcard.Field, len(fields))
+	for i, field := range fields {
+		f := *field
+		f.Value = ""
+		if field.Params != nil {
+			f.Params = make(vcard.Params, len(field.Params))
+			for k, v := range field.Params {
+				f.Params[k] = append([]string(nil), v...)
+			}
+		}
+		out[i] = &f
+	}
+	return out
+}
+
 // shapeCard applies the client's version negotiation and property projection to
 // one parsed card, leaving the original untouched.
 func shapeCard(obj reportObject, req *addressDataReq) (reportObject, error) {
@@ -203,9 +223,14 @@ func shapeCard(obj reportObject, req *addressDataReq) (reportObject, error) {
 		}
 		for _, p := range req.Props {
 			name := strings.ToUpper(p.Name)
-			if fields, ok := card[name]; ok {
-				projected[name] = fields
+			fields, ok := card[name]
+			if !ok {
+				continue
 			}
+			if p.NoValue {
+				fields = blankFields(fields)
+			}
+			projected[name] = fields
 		}
 		card = projected
 	}
