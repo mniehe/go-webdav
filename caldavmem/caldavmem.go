@@ -338,9 +338,10 @@ func (s *Store) CompareAndUpdateCalendar(_ context.Context, ref caldav.CalendarR
 	set(&cal.settings.Description, patch.Description)
 	set(&cal.settings.Color, patch.Color)
 	set(&cal.settings.Timezone, patch.Timezone)
-	if patch.SortOrder != nil {
-		order := *patch.SortOrder
+	if order, ok := patch.SortOrder.Value(); ok {
 		cal.settings.SortOrder = &order
+	} else if patch.SortOrder.Clears() {
+		cal.settings.SortOrder = nil
 	}
 
 	cal.bump()

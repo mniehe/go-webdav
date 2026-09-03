@@ -92,7 +92,7 @@ func testSettings(t *testing.T, newHarness NewHarness, cfg *config) {
 		cfg.need(t, CapCalendarUpdater, ok)
 
 		order := 42
-		updated, err := u.CompareAndUpdateCalendar(ctx, furnishedRef, caldav.CalendarPatch{SortOrder: &order}, caldav.Unconditional())
+		updated, err := u.CompareAndUpdateCalendar(ctx, furnishedRef, caldav.CalendarPatch{SortOrder: caldav.SetValue(order)}, caldav.Unconditional())
 		if err != nil {
 			t.Fatalf("CompareAndUpdateCalendar: %v", err)
 		}

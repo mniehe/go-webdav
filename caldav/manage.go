@@ -135,7 +135,7 @@ type calendarSettings struct {
 	displayName *string
 	description *string
 	color       *string
-	sortOrder   *int
+	sortOrder   ValuePatch[int]
 	timezone    *Timezone
 	accepts     *ItemKinds
 }
@@ -199,16 +199,15 @@ func applyCalendarSetting(s *calendarSettings, prop *internal.PropUpdate, creati
 		}
 		s.color = &v.Color
 	case calendarOrderName:
+		if prop.Remove {
+			s.sortOrder = ClearValue[int]()
+			return http.StatusOK
+		}
 		var v calendarOrder
 		if !internal.DecodePropUpdate(prop, &v) {
 			return http.StatusConflict
 		}
-		if prop.Remove {
-			// CalendarPatch cannot express "clear SortOrder" — nil means
-			// unchanged. Refusing beats silently setting zero.
-			return http.StatusForbidden
-		}
-		s.sortOrder = &v.Order
+		s.sortOrder = SetValue(v.Order)
 	case calendarTimezoneName:
 		var v calendarTimezone
 		if !internal.DecodePropUpdate(prop, &v) {

@@ -202,6 +202,35 @@ func TestProppatchRemoveClearsAProperty(t *testing.T) {
 	}
 }
 
+func TestProppatchRemoveClearsCalendarOrder(t *testing.T) {
+	h := handlerFor(t, newStore(t), caldav.Config{})
+
+	set := `<?xml version="1.0"?>
+<D:propertyupdate xmlns:D="DAV:" xmlns:A="http://apple.com/ns/ical/">
+  <D:set><D:prop><A:calendar-order>7</A:calendar-order></D:prop></D:set>
+</D:propertyupdate>`
+	if w := proppatch(h, "/alice/work/", set); w.Code != http.StatusMultiStatus {
+		t.Fatalf("setting up: %d\n%s", w.Code, w.Body.String())
+	}
+
+	remove := `<?xml version="1.0"?>
+<D:propertyupdate xmlns:D="DAV:" xmlns:A="http://apple.com/ns/ical/">
+  <D:remove><D:prop><A:calendar-order/></D:prop></D:remove>
+</D:propertyupdate>`
+	w := proppatch(h, "/alice/work/", remove)
+	if w.Code != http.StatusMultiStatus {
+		t.Fatalf("status = %d, want %d\n%s", w.Code, http.StatusMultiStatus, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "403") {
+		t.Fatalf("body = %q, removing calendar-order was refused", w.Body.String())
+	}
+
+	resp := propfind(t, h, "/alice/work/", "0", askFor(appleName("calendar-order"))).at(t, "/alice/work/")
+	if code, reported := resp.found(appleName("calendar-order")); reported && code == http.StatusOK {
+		t.Error("calendar-order survived its removal")
+	}
+}
+
 func TestProppatchIsAtomic(t *testing.T) {
 	h := handlerFor(t, newStore(t), caldav.Config{})
 

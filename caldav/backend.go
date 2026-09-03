@@ -144,14 +144,36 @@ type CreateCalendarRequest struct {
 }
 
 // CalendarPatch distinguishes "unchanged" from "set to empty": a nil field is
-// untouched. It cannot change Name — that would move the calendar.
+// untouched. SortOrder needs a third state — a calendar can have no order at
+// all, which an empty value cannot express for an int — so it is a ValuePatch.
+// It cannot change Name — that would move the calendar.
 type CalendarPatch struct {
 	DisplayName *string
 	Description *string
 	Color       *string
 	Timezone    *Timezone
-	SortOrder   *int
+	SortOrder   ValuePatch[int]
 }
+
+// ValuePatch is one field of a patch whose zero value must not be a valid
+// setting: unchanged, set to a value, or cleared to "no value at all".
+type ValuePatch[T any] struct {
+	value   T
+	set     bool
+	cleared bool
+}
+
+// SetValue patches the field to v.
+func SetValue[T any](v T) ValuePatch[T] { return ValuePatch[T]{value: v, set: true} }
+
+// ClearValue patches the field away entirely.
+func ClearValue[T any]() ValuePatch[T] { return ValuePatch[T]{cleared: true} }
+
+// Value returns the value to set and whether one was set.
+func (p ValuePatch[T]) Value() (T, bool) { return p.value, p.set }
+
+// Clears reports whether the field is to be cleared.
+func (p ValuePatch[T]) Clears() bool { return p.cleared }
 
 // CalendarCreator makes new calendars.
 type CalendarCreator interface {
