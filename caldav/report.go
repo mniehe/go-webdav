@@ -102,7 +102,7 @@ func (a *adapter) parseStored(ctx context.Context, ref ItemRef, item Item, scope
 // engine's output — projected or expanded — rather than the stored bytes.
 func reportResponse(obj reportObject, pf *internal.PropFind) (*internal.Response, error) {
 	var buf bytes.Buffer
-	if err := ical.NewEncoder(&buf).Encode(obj.data); err != nil {
+	if err := encodeCalendarData(&buf, obj.data); err != nil {
 		return nil, fmt.Errorf("caldav: encoding report calendar-data: %w", err)
 	}
 

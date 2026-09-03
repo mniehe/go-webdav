@@ -605,3 +605,15 @@ func contains(hrefs []string, want string) bool {
 	}
 	return false
 }
+
+func expandQuery(start, end string) string {
+	return `<?xml version="1.0"?>
+<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop>
+    <C:calendar-data>
+      <C:expand start="` + start + `" end="` + end + `"/>
+    </C:calendar-data>
+  </D:prop>
+  <C:filter><C:comp-filter name="VCALENDAR"/></C:filter>
+</C:calendar-query>`
+}

@@ -54,3 +54,31 @@ func TestQueryLimitRecurrenceSetKeepsATodoWhoseOriginalSpanCoversTheWindow(t *te
 		t.Errorf("calendar-data = %q, want the override whose original span covers the window", data)
 	}
 }
+
+// orphanOverrideICS is a legal detached instance: one VEVENT carrying a
+// RECURRENCE-ID with no master alongside it.
+const orphanOverrideICS = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n" +
+	"BEGIN:VEVENT\r\nUID:orphan\r\nDTSTAMP:20260801T000000Z\r\nRECURRENCE-ID:20261005T090000Z\r\n" +
+	"DTSTART:20261005T110000Z\r\nDTEND:20261005T113000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+
+func TestQueryShapingAwayEveryComponentStillAnswers(t *testing.T) {
+	// RFC 4791 §9.6 allows the calendar-data a report returns to be invalid per
+	// its media type. A shaped object left with no components is one of those
+	// cases, and refusing to encode it poisons the whole multistatus.
+	bodies := map[string]string{
+		"limit-recurrence-set": limitRecurrenceQuery("20260801T000000Z", "20260901T000000Z"),
+		"expand":               expandQuery("20260801T000000Z", "20260901T000000Z"),
+	}
+	for name, body := range bodies {
+		t.Run(name, func(t *testing.T) {
+			store := newStore(t)
+			seedRaw(t, store, "alice", "orphan.ics", orphanOverrideICS, "orphan")
+			h := handlerFor(t, store, caldav.Config{})
+
+			ms := reportMS(t, h, "/alice/work/", body)
+			if got := ms.hrefs(); len(got) != 1 || got[0] != "/alice/work/orphan.ics" {
+				t.Fatalf("hrefs = %v, want a row for the item", got)
+			}
+		})
+	}
+}
