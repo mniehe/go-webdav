@@ -336,8 +336,10 @@ func TestQueryNoValueStripsTheRequestedValue(t *testing.T) {
 	if !strings.Contains(data, "FN:Ada Lovelace") {
 		t.Errorf("address-data = %q, want the requested FN with its value", data)
 	}
-	if !strings.Contains(data, "EMAIL") {
-		t.Errorf("address-data = %q, want the EMAIL name to survive novalue", data)
+	// The RFC keeps the parameters too, so a client learns the property was
+	// there and in what form without being sent its contents.
+	if !strings.Contains(data, "EMAIL;TYPE=work:") {
+		t.Errorf("address-data = %q, want the EMAIL name and its parameters to survive novalue", data)
 	}
 	if strings.Contains(data, "ada@example.com") {
 		t.Errorf("address-data = %q, novalue=yes must strip the value data", data)

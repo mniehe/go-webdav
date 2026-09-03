@@ -137,3 +137,31 @@ func TestQueryLimitRecurrenceSetReadsAnEmbeddedTimezone(t *testing.T) {
 		t.Errorf("calendar-data = %q, the override is 20260831T230000Z once its own VTIMEZONE is applied, which is outside the window; reading the wall clock as UTC keeps it", data)
 	}
 }
+
+func TestMultigetShapesLikeAQuery(t *testing.T) {
+	store := newStore(t)
+	seedRaw(t, store, "alice", "weekly.ics", overriddenWeeklyICS, "weekly")
+	h := handlerFor(t, store, caldav.Config{})
+
+	// Both reports shape through the same code, and only calendar-query
+	// otherwise exercises it.
+	body := `<?xml version="1.0"?>
+<C:calendar-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop>
+    <C:calendar-data>
+      <C:limit-recurrence-set start="20260801T000000Z" end="20260901T000000Z"/>
+    </C:calendar-data>
+  </D:prop>
+  <D:href>/alice/work/weekly.ics</D:href>
+</C:calendar-multiget>`
+
+	data := reportMS(t, h, "/alice/work/", body).
+		at(t, "/alice/work/weekly.ics").value(t, caldavName("calendar-data"))
+
+	if !strings.Contains(data, "MovedWithinAugust") {
+		t.Errorf("calendar-data = %q, want the override inside the window", data)
+	}
+	if strings.Contains(data, "MovedWithinOctober") {
+		t.Errorf("calendar-data = %q, multiget must limit the recurrence set as a query does", data)
+	}
+}

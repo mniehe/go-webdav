@@ -14,7 +14,7 @@ import (
 
 const (
 	augustICS = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\nBEGIN:VEVENT\r\nUID:august\r\nDTSTAMP:20260801T000000Z\r\n" +
-		"DTSTART:20260810T090000Z\r\nDTEND:20260810T100000Z\r\nSUMMARY:August\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+		"DTSTART:20260810T090000Z\r\nDTEND:20260810T100000Z\r\nSUMMARY;LANGUAGE=en:August\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
 	octoberICS = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\nBEGIN:VEVENT\r\nUID:october\r\nDTSTAMP:20260801T000000Z\r\n" +
 		"DTSTART:20261010T090000Z\r\nDTEND:20261010T100000Z\r\nSUMMARY:October\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
 	weeklyICS = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\nBEGIN:VEVENT\r\nUID:weekly\r\nDTSTAMP:20260801T000000Z\r\n" +
@@ -333,11 +333,38 @@ func TestQueryNoValueStripsTheRequestedValue(t *testing.T) {
 	if !strings.Contains(data, "UID:august") {
 		t.Errorf("calendar-data = %q, want the requested UID with its value", data)
 	}
-	if !strings.Contains(data, "SUMMARY:") {
-		t.Errorf("calendar-data = %q, want the SUMMARY name to survive novalue", data)
+	// The RFC keeps the parameters too, so a client learns the property was
+	// there and in what form without being sent its contents.
+	if !strings.Contains(data, "SUMMARY;LANGUAGE=en:") {
+		t.Errorf("calendar-data = %q, want the SUMMARY name and its parameters to survive novalue", data)
 	}
-	if strings.Contains(data, "SUMMARY:August") {
+	if strings.Contains(data, "=en:August") {
 		t.Errorf("calendar-data = %q, novalue=yes must strip the value data", data)
+	}
+}
+
+func TestQueryNoValueDoesNotCorruptTheStoredItem(t *testing.T) {
+	store := newStore(t)
+	seedRaw(t, store, "alice", "august.ics", augustICS, "august")
+	h := handlerFor(t, store, caldav.Config{})
+
+	body := `<?xml version="1.0"?>
+<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop>
+    <C:calendar-data>
+      <C:comp name="VCALENDAR">
+        <C:comp name="VEVENT"><C:prop name="SUMMARY" novalue="yes"/></C:comp>
+      </C:comp>
+    </C:calendar-data>
+  </D:prop>
+  <C:filter><C:comp-filter name="VCALENDAR"/></C:filter>
+</C:calendar-query>`
+	reportMS(t, h, "/alice/work/", body)
+
+	// Blanking must happen on a copy: a Backend commonly hands out pointers
+	// into its own cache.
+	if got := do(h, http.MethodGet, "/alice/work/august.ics").Body.String(); got != augustICS {
+		t.Errorf("stored bytes changed after a novalue query:\n%q", got)
 	}
 }
 
