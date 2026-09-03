@@ -16,11 +16,11 @@ var furnishedRef = caldav.CalendarRef{Account: Alice, Calendar: caldav.MustSegme
 
 // testSettings covers a calendar's own fields surviving storage.
 //
-// Not every field is reachable from here. CreateCalendarRequest carries no
-// SortOrder and no MaxItemSize, so a fixture cannot seed them: SortOrder is
-// reached through CalendarUpdater instead, and MaxItemSize cannot be set over
-// this interface at all. That last one is an interface gap, not a coverage gap,
-// and the suite says so rather than pretending to test it.
+// Not every field is reachable from here. A harness seeds a fixture through
+// CreateCalendarRequest, which carries no MaxItemSize, so the suite cannot set
+// one: that is an interface gap, not a coverage gap, and the suite says so
+// rather than pretending to test it. SortOrder is exercised through
+// CalendarUpdater, whose three states no create request can express.
 func testSettings(t *testing.T, newHarness NewHarness, cfg *config) {
 	ctx := context.Background()
 
@@ -109,6 +109,61 @@ func testSettings(t *testing.T, newHarness NewHarness, cfg *config) {
 		}
 		if *got.SortOrder != order {
 			t.Errorf("SortOrder = %d, want %d", *got.SortOrder, order)
+		}
+	})
+
+	setSortOrder := func(t *testing.T, u caldav.CalendarUpdater) {
+		t.Helper()
+
+		if _, err := u.CompareAndUpdateCalendar(ctx, furnishedRef, caldav.CalendarPatch{SortOrder: caldav.SetValue(42)}, caldav.Unconditional()); err != nil {
+			t.Fatalf("setting the sort order first: %v", err)
+		}
+	}
+
+	t.Run("SortOrderClears", func(t *testing.T) {
+		b := setup(ctx, t, newHarness, furnished)
+		u, ok := b.(caldav.CalendarUpdater)
+		cfg.need(t, CapCalendarUpdater, ok)
+		setSortOrder(t, u)
+
+		updated, err := u.CompareAndUpdateCalendar(ctx, furnishedRef, caldav.CalendarPatch{SortOrder: caldav.ClearValue[int]()}, caldav.Unconditional())
+		if err != nil {
+			t.Fatalf("CompareAndUpdateCalendar: %v", err)
+		}
+		if updated.SortOrder != nil {
+			t.Errorf("the update returned SortOrder %d after it was cleared; the server reports a write that did not happen", *updated.SortOrder)
+		}
+
+		got, err := b.GetCalendar(ctx, furnishedRef)
+		if err != nil {
+			t.Fatalf("GetCalendar: %v", err)
+		}
+		if got.SortOrder != nil {
+			t.Errorf("SortOrder = %d after being cleared, want none — a client that removed the property gets it back on its next poll", *got.SortOrder)
+		}
+	})
+
+	t.Run("SortOrderSurvivesAnUnrelatedPatch", func(t *testing.T) {
+		b := setup(ctx, t, newHarness, furnished)
+		u, ok := b.(caldav.CalendarUpdater)
+		cfg.need(t, CapCalendarUpdater, ok)
+		setSortOrder(t, u)
+
+		renamed := "Renamed"
+		updated, err := u.CompareAndUpdateCalendar(ctx, furnishedRef, caldav.CalendarPatch{DisplayName: &renamed}, caldav.Unconditional())
+		if err != nil {
+			t.Fatalf("CompareAndUpdateCalendar: %v", err)
+		}
+		if updated.SortOrder == nil || *updated.SortOrder != 42 {
+			t.Fatalf("the update returned SortOrder %v, want 42 — an untouched ValuePatch field must not be read as a clear", updated.SortOrder)
+		}
+
+		got, err := b.GetCalendar(ctx, furnishedRef)
+		if err != nil {
+			t.Fatalf("GetCalendar: %v", err)
+		}
+		if got.SortOrder == nil || *got.SortOrder != 42 {
+			t.Errorf("SortOrder = %v after a patch that did not name it, want 42", got.SortOrder)
 		}
 	})
 }

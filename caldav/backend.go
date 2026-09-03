@@ -196,6 +196,15 @@ type CalendarCreator interface {
 
 // CalendarUpdater changes a calendar's settings.
 type CalendarUpdater interface {
+	// CompareAndUpdateCalendar applies patch in one transaction and returns the
+	// calendar as it stands afterwards.
+	//
+	// A ValuePatch field carries three states, and all three have to be
+	// honoured: Value() reports a new setting, Clears() a removal, and neither
+	// means the field was not named at all. Treating a clear as "unchanged"
+	// makes the server answer a PROPPATCH removal with a success the storage
+	// never performed; treating "unchanged" as a clear wipes a setting no
+	// request mentioned.
 	CompareAndUpdateCalendar(ctx context.Context, ref CalendarRef, patch CalendarPatch, pre Preconditions) (Calendar, error)
 }
 
