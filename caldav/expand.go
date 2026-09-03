@@ -335,9 +335,3 @@ func cloneComponent(comp *ical.Component) *ical.Component {
 	}
 	return out
 }
-
-// expandObjectWithin applies a requested expansion to one object's data.
-// Expansion is a transformation of the response body only: the object's ETag
-// still identifies the stored resource. The input is never mutated, for the
-// reason projectCalendar gives — a Backend commonly hands out pointers into its
-// own cache, and expanding through one turns a read into a write.

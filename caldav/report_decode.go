@@ -135,21 +135,17 @@ func countCompRequestNode(nodes *int, name string) error {
 	return nil
 }
 
-// decodeExpand reads the RFC 4791 §9.6.5 expand window. Both attributes are
-// required: a missing one decodes as the zero time, which would otherwise ask
-// for an unbounded expansion.
+// decodeExpand reads the RFC 4791 §9.6.5 expand window, which is bounded the
+// same way as every other shaping window.
 func decodeExpand(el *expand) (*calendarExpandRequest, error) {
 	if el == nil {
 		return nil, nil
 	}
-	start, end := time.Time(el.Start), time.Time(el.End)
-	if start.IsZero() || end.IsZero() {
-		return nil, internal.HTTPErrorf(http.StatusBadRequest, "caldav: expand requires both a start and an end")
+	window, err := decodeWindow("expand", el.Start, el.End)
+	if err != nil {
+		return nil, err
 	}
-	if !start.Before(end) {
-		return nil, internal.HTTPErrorf(http.StatusBadRequest, "caldav: expand start must precede end")
-	}
-	return &calendarExpandRequest{Start: start, End: end}, nil
+	return &calendarExpandRequest{Start: window.Start, End: window.End}, nil
 }
 
 // decodeWindow reads a [start, end) UTC window whose two attributes are both

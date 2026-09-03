@@ -7,8 +7,11 @@ import (
 )
 
 // requiredProps are the properties a component cannot be valid without. RFC 4791
-// §9.6 requires the projection to still yield a valid iCalendar object, so these
-// survive even when the client did not name them.
+// §9.6 asks the projection to still yield a valid iCalendar object, so these
+// survive even when the client did not name them. The same section allows the
+// result to be invalid where the client asked for exactly that — novalue strips
+// the value data off properties that cannot legally omit it — so keeping these
+// is a default, not a guarantee the response is valid.
 func requiredProps(compName string) []string {
 	switch compName {
 	case ical.CompCalendar:

@@ -160,6 +160,19 @@ func dataRequestFrom(prop *internal.Prop) (addressDataReq, error) {
 	return req, nil
 }
 
+// cloneField copies a field deeply enough that rewriting the copy cannot touch
+// the original's parameters.
+func cloneField(field *vcard.Field) *vcard.Field {
+	cloned := *field
+	if field.Params != nil {
+		cloned.Params = make(vcard.Params, len(field.Params))
+		for k, v := range field.Params {
+			cloned.Params[k] = append([]string(nil), v...)
+		}
+	}
+	return &cloned
+}
+
 // copyCard clones a card deeply enough that converting or projecting the copy
 // cannot touch the original's fields or parameters.
 func copyCard(card vcard.Card) vcard.Card {
@@ -167,14 +180,7 @@ func copyCard(card vcard.Card) vcard.Card {
 	for name, fields := range card {
 		cloned := make([]*vcard.Field, len(fields))
 		for i, field := range fields {
-			f := *field
-			if field.Params != nil {
-				f.Params = make(vcard.Params, len(field.Params))
-				for k, v := range field.Params {
-					f.Params[k] = append([]string(nil), v...)
-				}
-			}
-			cloned[i] = &f
+			cloned[i] = cloneField(field)
 		}
 		out[name] = cloned
 	}
@@ -186,15 +192,9 @@ func copyCard(card vcard.Card) vcard.Card {
 func blankFields(fields []*vcard.Field) []*vcard.Field {
 	out := make([]*vcard.Field, len(fields))
 	for i, field := range fields {
-		f := *field
-		f.Value = ""
-		if field.Params != nil {
-			f.Params = make(vcard.Params, len(field.Params))
-			for k, v := range field.Params {
-				f.Params[k] = append([]string(nil), v...)
-			}
-		}
-		out[i] = &f
+		blanked := cloneField(field)
+		blanked.Value = ""
+		out[i] = blanked
 	}
 	return out
 }
