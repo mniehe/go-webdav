@@ -371,7 +371,7 @@ func compOverlaps(start, end time.Time, comp *ical.Component) (bool, error) {
 func matchCompTimeRange(start, end time.Time, comp *ical.Component) (bool, error) {
 	// See https://datatracker.ietf.org/doc/html/rfc4791#section-9.9
 
-	rset, err := comp.RecurrenceSet(start.Location())
+	rset, err := splitDateLists(comp).RecurrenceSet(start.Location())
 	if err != nil {
 		return false, err
 	}

@@ -236,7 +236,8 @@ func parseObservance(sub *ical.Component) (observance, error) {
 	// RecurrenceSet folds RRULE, RDATE and DTSTART into one iterator, reading
 	// the onsets as the wall clocks they are written in. A sub-component with no
 	// RRULE returns nil, leaving the single DTSTART plus any RDATEs.
-	set, err := sub.RecurrenceSet(time.UTC)
+	onsets := splitDateLists(sub)
+	set, err := onsets.RecurrenceSet(time.UTC)
 	if err != nil {
 		return observance{}, fmt.Errorf("%s has an invalid recurrence: %w", sub.Name, err)
 	}
@@ -249,7 +250,7 @@ func parseObservance(sub *ical.Component) (observance, error) {
 		obs.set = set
 		return obs, nil
 	}
-	for _, rd := range sub.Props[ical.PropRecurrenceDates] {
+	for _, rd := range onsets.Props[ical.PropRecurrenceDates] {
 		t, err := rd.DateTime(time.UTC)
 		if err != nil {
 			return observance{}, fmt.Errorf("%s has an invalid RDATE: %w", sub.Name, err)

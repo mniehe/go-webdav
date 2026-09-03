@@ -187,7 +187,7 @@ func partitionForExpansion(cal *ical.Calendar) (masters []recurrenceMaster, over
 			continue
 		}
 
-		set, derr := child.RecurrenceSet(time.UTC)
+		set, derr := splitDateLists(child).RecurrenceSet(time.UTC)
 		if derr != nil {
 			return nil, nil, nil, internal.HTTPErrorf(http.StatusForbidden, "caldav: cannot expand recurrence: invalid recurrence rule")
 		}
