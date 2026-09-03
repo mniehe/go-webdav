@@ -659,3 +659,39 @@ func TestQueryFailsLoudlyOnUnreadableShapedContent(t *testing.T) {
 		})
 	}
 }
+
+func windowQuery(element, attrs string) string {
+	return `<?xml version="1.0"?>
+<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop>
+    <C:calendar-data>
+      <C:` + element + ` ` + attrs + `/>
+    </C:calendar-data>
+  </D:prop>
+  <C:filter><C:comp-filter name="VCALENDAR"/></C:filter>
+</C:calendar-query>`
+}
+
+func TestReportWindowsRequireAnOrderedStartAndEnd(t *testing.T) {
+	store := newStore(t)
+	seedRaw(t, store, "alice", "august.ics", augustICS, "august")
+	h := handlerFor(t, store, caldav.Config{})
+
+	// A missing attribute decodes as the zero time, which would otherwise ask
+	// for an unbounded window over every stored object.
+	windows := map[string]string{
+		"missing start": `end="20260901T000000Z"`,
+		"missing end":   `start="20260801T000000Z"`,
+		"inverted":      `start="20260901T000000Z" end="20260801T000000Z"`,
+	}
+	for _, element := range []string{"expand", "limit-recurrence-set", "limit-freebusy-set"} {
+		for name, attrs := range windows {
+			t.Run(element+"/"+name, func(t *testing.T) {
+				w := report(t, h, "/alice/work/", windowQuery(element, attrs))
+				if w.Code != http.StatusBadRequest {
+					t.Errorf("status = %d, want %d\n%s", w.Code, http.StatusBadRequest, w.Body.String())
+				}
+			})
+		}
+	}
+}
