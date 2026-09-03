@@ -82,3 +82,58 @@ func TestQueryShapingAwayEveryComponentStillAnswers(t *testing.T) {
 		})
 	}
 }
+
+// thisAndFutureICS moves the 10 August instance out to March 2027 and marks the
+// override as redefining every instance from that RECURRENCE-ID on.
+const thisAndFutureICS = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n" +
+	"BEGIN:VEVENT\r\nUID:weekly\r\nDTSTAMP:20260801T000000Z\r\nDTSTART:20260803T090000Z\r\nDTEND:20260803T093000Z\r\n" +
+	"RRULE:FREQ=WEEKLY\r\nSUMMARY:Weekly\r\nEND:VEVENT\r\n" +
+	"BEGIN:VEVENT\r\nUID:weekly\r\nRECURRENCE-ID;RANGE=THISANDFUTURE:20260810T090000Z\r\nDTSTAMP:20260801T000000Z\r\n" +
+	"DTSTART:20270301T090000Z\r\nDTEND:20270301T093000Z\r\nSUMMARY:RedefinesTheRest\r\nEND:VEVENT\r\n" +
+	"END:VCALENDAR\r\n"
+
+func TestQueryLimitRecurrenceSetKeepsAThisAndFutureOverride(t *testing.T) {
+	store := newStore(t)
+	seedRaw(t, store, "alice", "weekly.ics", thisAndFutureICS, "weekly")
+	h := handlerFor(t, store, caldav.Config{})
+
+	// RFC 5545 §3.2.13: RANGE=THISANDFUTURE redefines every instance from the
+	// RECURRENCE-ID on, so the override governs the window even though neither
+	// its current nor its original time falls inside it.
+	data := reportMS(t, h, "/alice/work/", limitRecurrenceQuery("20260901T000000Z", "20261001T000000Z")).
+		at(t, "/alice/work/weekly.ics").value(t, caldavName("calendar-data"))
+
+	if !strings.Contains(data, "RedefinesTheRest") {
+		t.Errorf("calendar-data = %q, want the THISANDFUTURE override that governs the window", data)
+	}
+}
+
+// embeddedZoneICS carries its own VTIMEZONE under a name time.LoadLocation
+// cannot serve, so every time in it can only be read through that definition.
+// The override sits at 09:00 on 1 September in a +10:00 zone, which is 23:00 on
+// 31 August UTC — just outside the window below.
+const embeddedZoneICS = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n" +
+	"BEGIN:VTIMEZONE\r\nTZID:Test/Plus10\r\nBEGIN:STANDARD\r\nDTSTART:19700101T000000\r\n" +
+	"TZOFFSETFROM:+1000\r\nTZOFFSETTO:+1000\r\nEND:STANDARD\r\nEND:VTIMEZONE\r\n" +
+	"BEGIN:VEVENT\r\nUID:zoned\r\nDTSTAMP:20260801T000000Z\r\n" +
+	"DTSTART;TZID=Test/Plus10:20260803T090000\r\nDTEND;TZID=Test/Plus10:20260803T093000\r\n" +
+	"RRULE:FREQ=WEEKLY\r\nSUMMARY:ZonedWeekly\r\nEND:VEVENT\r\n" +
+	"BEGIN:VEVENT\r\nUID:zoned\r\nRECURRENCE-ID;TZID=Test/Plus10:20260901T090000\r\nDTSTAMP:20260801T000000Z\r\n" +
+	"DTSTART;TZID=Test/Plus10:20260901T090000\r\nDTEND;TZID=Test/Plus10:20260901T093000\r\n" +
+	"SUMMARY:ZonedOverride\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+
+func TestQueryLimitRecurrenceSetReadsAnEmbeddedTimezone(t *testing.T) {
+	store := newStore(t)
+	seedRaw(t, store, "alice", "zoned.ics", embeddedZoneICS, "zoned")
+	h := handlerFor(t, store, caldav.Config{})
+
+	data := reportMS(t, h, "/alice/work/", limitRecurrenceQuery("20260901T000000Z", "20261001T000000Z")).
+		at(t, "/alice/work/zoned.ics").value(t, caldavName("calendar-data"))
+
+	if !strings.Contains(data, "ZonedWeekly") {
+		t.Fatalf("calendar-data = %q, the master must survive unexpanded", data)
+	}
+	if strings.Contains(data, "ZonedOverride") {
+		t.Errorf("calendar-data = %q, the override is 20260831T230000Z once its own VTIMEZONE is applied, which is outside the window; reading the wall clock as UTC keeps it", data)
+	}
+}
