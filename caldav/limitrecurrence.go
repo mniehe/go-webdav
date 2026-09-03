@@ -22,18 +22,14 @@ func limitRecurrenceCalendar(cal *ical.Calendar, window *calendarTimeWindow) (*i
 		return nil, err
 	}
 
-	// An override's original interval starts at its RECURRENCE-ID and spans its
-	// master's duration.
-	masterDurations := make(map[string]time.Duration)
+	// An override's original instance takes its shape from the master of the
+	// same UID, so the masters are indexed before the overrides are judged.
+	masters := make(map[string]*ical.Component)
 	for _, child := range resolved.Children {
 		if child.Name == ical.CompTimezone || child.Props.Get(ical.PropRecurrenceID) != nil {
 			continue
 		}
-		start, end, err := compInterval(child, time.UTC)
-		if err != nil {
-			continue
-		}
-		masterDurations[propValue(child, ical.PropUID)] = end.Sub(start)
+		masters[propValue(child, ical.PropUID)] = child
 	}
 
 	root := cloneComponent(cal.Component)
@@ -44,7 +40,7 @@ func limitRecurrenceCalendar(cal *ical.Calendar, window *calendarTimeWindow) (*i
 			out.Children = append(out.Children, child)
 			continue
 		}
-		impacts, err := overrideImpacts(resolved.Children[i], masterDurations, window)
+		impacts, err := overrideImpacts(resolved.Children[i], masters, window)
 		if err != nil {
 			return nil, err
 		}
@@ -55,12 +51,17 @@ func limitRecurrenceCalendar(cal *ical.Calendar, window *calendarTimeWindow) (*i
 	return out, nil
 }
 
-func overrideImpacts(ov *ical.Component, masterDurations map[string]time.Duration, window *calendarTimeWindow) (bool, error) {
-	curStart, curEnd, err := compInterval(ov, time.UTC)
+// overrideImpacts reports whether an overridden instance impacts the window in
+// either its current or its original time. RFC 4791 §9.6.6 requires both tests
+// to use the logic CALDAV:time-range is defined with, which §9.9 makes
+// dependent on the component's own type: a VTODO is judged on DUE and DURATION
+// as much as on DTSTART, and a VEVENT alone occupies an interval.
+func overrideImpacts(ov *ical.Component, masters map[string]*ical.Component, window *calendarTimeWindow) (bool, error) {
+	current, err := compOverlaps(window.Start, window.End, ov)
 	if err != nil {
 		return false, internal.HTTPErrorf(http.StatusForbidden, "caldav: cannot limit recurrence set: invalid override interval")
 	}
-	if intervalOverlaps(window.Start, window.End, curStart, curEnd) {
+	if current {
 		return true, nil
 	}
 
@@ -75,9 +76,16 @@ func overrideImpacts(ov *ical.Component, masterDurations map[string]time.Duratio
 		return true, nil
 	}
 
-	duration, known := masterDurations[propValue(ov, ical.PropUID)]
-	if !known {
-		duration = curEnd.Sub(curStart)
+	// The original instance is the master materialised at the RECURRENCE-ID.
+	// Without a master to take the shape from — a detached instance stored on
+	// its own — the override's own shape is carried back to that time instead.
+	shape := ov
+	if master, ok := masters[propValue(ov, ical.PropUID)]; ok {
+		shape = master
 	}
-	return intervalOverlaps(window.Start, window.End, rid, rid.Add(duration)), nil
+	original, err := recurrenceInstance(shape, rid)
+	if err != nil {
+		return false, err
+	}
+	return compOverlaps(window.Start, window.End, original)
 }
