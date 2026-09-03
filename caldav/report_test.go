@@ -289,15 +289,7 @@ func TestQueryLimitFreeBusySetDropsPeriodsOutsideTheWindow(t *testing.T) {
 
 	// RFC 4791 §9.6.7: only the FREEBUSY values intersecting the window are
 	// returned; a FREEBUSY left without any values is dropped whole.
-	body := `<?xml version="1.0"?>
-<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
-  <D:prop>
-    <C:calendar-data>
-      <C:limit-freebusy-set start="20260801T000000Z" end="20260901T000000Z"/>
-    </C:calendar-data>
-  </D:prop>
-  <C:filter><C:comp-filter name="VCALENDAR"/></C:filter>
-</C:calendar-query>`
+	body := limitFreeBusyQuery("20260801T000000Z", "20260901T000000Z")
 
 	data := reportMS(t, h, "/alice/work/", body).
 		at(t, "/alice/work/busy.ics").value(t, caldavName("calendar-data"))
@@ -616,4 +608,54 @@ func expandQuery(start, end string) string {
   </D:prop>
   <C:filter><C:comp-filter name="VCALENDAR"/></C:filter>
 </C:calendar-query>`
+}
+
+func limitFreeBusyQuery(start, end string) string {
+	return `<?xml version="1.0"?>
+<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop>
+    <C:calendar-data>
+      <C:limit-freebusy-set start="` + start + `" end="` + end + `"/>
+    </C:calendar-data>
+  </D:prop>
+  <C:filter><C:comp-filter name="VCALENDAR"/></C:filter>
+</C:calendar-query>`
+}
+
+func TestQueryFailsLoudlyOnUnreadableShapedContent(t *testing.T) {
+	// Shaping reads stored values the library validated on the way in, so a
+	// value it cannot read is a contract violation, not a client error. The
+	// policy TestQueryFailsLoudlyOnUnparseableStoredContent states applies to
+	// every shaping path alike.
+	tests := map[string]struct{ ics, body string }{
+		"an override with an unreadable interval": {
+			"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n" +
+				"BEGIN:VEVENT\r\nUID:broken\r\nDTSTAMP:20260801T000000Z\r\nRECURRENCE-ID:20261005T090000Z\r\n" +
+				"DTSTART:not-a-time\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+			limitRecurrenceQuery("20260801T000000Z", "20260901T000000Z"),
+		},
+		"an override with an unreadable RECURRENCE-ID": {
+			"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n" +
+				"BEGIN:VEVENT\r\nUID:broken\r\nDTSTAMP:20260801T000000Z\r\nRECURRENCE-ID:nonsense\r\n" +
+				"DTSTART:20261005T110000Z\r\nDTEND:20261005T113000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+			limitRecurrenceQuery("20260801T000000Z", "20260901T000000Z"),
+		},
+		"a FREEBUSY that is not a period": {
+			"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n" +
+				"BEGIN:VFREEBUSY\r\nUID:broken\r\nDTSTAMP:20260801T000000Z\r\nFREEBUSY:not-a-period\r\n" +
+				"END:VFREEBUSY\r\nEND:VCALENDAR\r\n",
+			limitFreeBusyQuery("20260801T000000Z", "20260901T000000Z"),
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			store := newStore(t)
+			seedRaw(t, store, "alice", "broken.ics", test.ics, "broken")
+			h := handlerFor(t, store, caldav.Config{})
+
+			if w := report(t, h, "/alice/work/", test.body); w.Code != http.StatusInternalServerError {
+				t.Errorf("status = %d, want %d\n%s", w.Code, http.StatusInternalServerError, w.Body.String())
+			}
+		})
+	}
 }

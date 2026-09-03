@@ -1,12 +1,11 @@
 package caldav
 
 import (
-	"net/http"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/emersion/go-ical"
-	"github.com/mniehe/davkit/internal"
 )
 
 // limitRecurrenceCalendar returns cal without the overridden recurrence
@@ -59,7 +58,7 @@ func limitRecurrenceCalendar(cal *ical.Calendar, window *calendarTimeWindow) (*i
 func overrideImpacts(ov *ical.Component, masters map[string]*ical.Component, window *calendarTimeWindow) (bool, error) {
 	current, err := compOverlaps(window.Start, window.End, ov)
 	if err != nil {
-		return false, internal.HTTPErrorf(http.StatusForbidden, "caldav: cannot limit recurrence set: invalid override interval")
+		return false, fmt.Errorf("caldav: stored override holds an unreadable interval: %w", err)
 	}
 	if current {
 		return true, nil
@@ -68,7 +67,7 @@ func overrideImpacts(ov *ical.Component, masters map[string]*ical.Component, win
 	ridProp := ov.Props.Get(ical.PropRecurrenceID)
 	rid, err := ridProp.DateTime(time.UTC)
 	if err != nil {
-		return false, internal.HTTPErrorf(http.StatusForbidden, "caldav: cannot limit recurrence set: invalid RECURRENCE-ID")
+		return false, fmt.Errorf("caldav: stored override holds an unreadable RECURRENCE-ID: %w", err)
 	}
 	// RANGE=THISANDFUTURE redefines every instance from the RECURRENCE-ID on,
 	// so the override matters whenever the window reaches past that point.
