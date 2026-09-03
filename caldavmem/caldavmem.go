@@ -316,6 +316,10 @@ func (s *Store) CompareAndCreateCalendar(_ context.Context, account caldav.Accou
 		byID:    map[string]caldav.Segment{},
 		viewers: map[caldav.AccountID]bool{},
 	}
+	if req.SortOrder != nil {
+		order := *req.SortOrder
+		cal.settings.SortOrder = &order
+	}
 	cal.bump()
 	s.cals[ref] = cal
 	return copyCalendar(&cal.settings), nil

@@ -160,6 +160,9 @@ func (s *calendarSettings) applyToCreate(req *CreateCalendarRequest) {
 	if s.color != nil {
 		req.Color = *s.color
 	}
+	if order, ok := s.sortOrder.Value(); ok {
+		req.SortOrder = &order
+	}
 	if s.timezone != nil {
 		req.Timezone = *s.timezone
 	}

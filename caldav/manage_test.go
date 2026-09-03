@@ -358,3 +358,25 @@ func TestDeleteOnAnAccountIsRefused(t *testing.T) {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusMethodNotAllowed)
 	}
 }
+
+func TestMkcalendarHonoursTheSortOrder(t *testing.T) {
+	h := handlerFor(t, newStore(t), caldav.Config{})
+
+	// MKCALENDAR accepts calendar-order and answers 201, so the calendar has to
+	// come back carrying it — a 201 for a property that was dropped tells the
+	// client a write happened that did not.
+	body := `<?xml version="1.0"?>
+<C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:A="http://apple.com/ns/ical/">
+  <D:set><D:prop><A:calendar-order>7</A:calendar-order></D:prop></D:set>
+</C:mkcalendar>`
+
+	w := mkcalendar(h, "/alice/ordered/", body)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d\n%s", w.Code, http.StatusCreated, w.Body.String())
+	}
+
+	resp := propfind(t, h, "/alice/ordered/", "0", askFor(appleName("calendar-order"))).at(t, "/alice/ordered/")
+	if got := resp.value(t, appleName("calendar-order")); got != "7" {
+		t.Errorf("calendar-order = %q, want 7", got)
+	}
+}

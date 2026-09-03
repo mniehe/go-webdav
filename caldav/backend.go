@@ -141,6 +141,10 @@ type CreateCalendarRequest struct {
 	Color       string
 	Timezone    Timezone
 	Accepts     ItemKinds
+
+	// SortOrder is nil when the calendar has no order of its own, which is not
+	// the same as an order of zero — see CalendarPatch.
+	SortOrder *int
 }
 
 // CalendarPatch distinguishes "unchanged" from "set to empty": a nil field is
