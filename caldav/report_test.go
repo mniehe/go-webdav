@@ -271,6 +271,48 @@ func TestQueryLimitRecurrenceSetRequiresAnOrderedWindow(t *testing.T) {
 	}
 }
 
+func TestQueryLimitFreeBusySetDropsPeriodsOutsideTheWindow(t *testing.T) {
+	store := newStore(t)
+	busyICS := "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\nBEGIN:VFREEBUSY\r\nUID:busy\r\nDTSTAMP:20260801T000000Z\r\n" +
+		"DTSTART:20260801T000000Z\r\nDTEND:20261101T000000Z\r\n" +
+		"FREEBUSY:20260810T090000Z/20260810T100000Z,20261010T090000Z/20261010T100000Z\r\n" +
+		"FREEBUSY;FBTYPE=BUSY-TENTATIVE:20261015T090000Z/20261015T100000Z\r\nEND:VFREEBUSY\r\nEND:VCALENDAR\r\n"
+	ref := caldav.ItemRef{
+		Calendar: caldav.CalendarRef{Account: "alice", Calendar: caldav.MustSegment("work")},
+		Item:     caldav.MustSegment("busy.ics"),
+	}
+	req := caldav.StoreItemRequest{Content: []byte(busyICS), ContentID: "busy", Kind: caldav.Availability, MayCreate: true}
+	if _, err := store.CompareAndStoreItem(context.Background(), ref, req); err != nil {
+		t.Fatalf("seeding busy.ics: %v", err)
+	}
+	h := handlerFor(t, store, caldav.Config{})
+
+	// RFC 4791 §9.6.7: only the FREEBUSY values intersecting the window are
+	// returned; a FREEBUSY left without any values is dropped whole.
+	body := `<?xml version="1.0"?>
+<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop>
+    <C:calendar-data>
+      <C:limit-freebusy-set start="20260801T000000Z" end="20260901T000000Z"/>
+    </C:calendar-data>
+  </D:prop>
+  <C:filter><C:comp-filter name="VCALENDAR"/></C:filter>
+</C:calendar-query>`
+
+	data := reportMS(t, h, "/alice/work/", body).
+		at(t, "/alice/work/busy.ics").value(t, caldavName("calendar-data"))
+
+	if !strings.Contains(data, "20260810T090000Z/20260810T100000Z") {
+		t.Errorf("calendar-data = %q, want the August period kept", data)
+	}
+	if strings.Contains(data, "20261010T090000Z") {
+		t.Errorf("calendar-data = %q, an October period leaked past the window", data)
+	}
+	if strings.Contains(data, "BUSY-TENTATIVE") {
+		t.Errorf("calendar-data = %q, a FREEBUSY whose every value is outside the window must be dropped", data)
+	}
+}
+
 func TestQueryNoValueStripsTheRequestedValue(t *testing.T) {
 	store := newStore(t)
 	seedRaw(t, store, "alice", "august.ics", augustICS, "august")

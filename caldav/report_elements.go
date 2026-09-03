@@ -140,6 +140,7 @@ type calendarDataReq struct {
 	Comp               *comp               `xml:"comp,omitempty"`
 	Expand             *expand             `xml:"expand,omitempty"`
 	LimitRecurrenceSet *limitRecurrenceSet `xml:"limit-recurrence-set,omitempty"`
+	LimitFreeBusySet   *limitFreeBusySet   `xml:"limit-freebusy-set,omitempty"`
 }
 
 // https://tools.ietf.org/html/rfc4791#section-9.6.1
@@ -163,6 +164,13 @@ type expand struct {
 // https://tools.ietf.org/html/rfc4791#section-9.6.6
 type limitRecurrenceSet struct {
 	XMLName xml.Name        `xml:"urn:ietf:params:xml:ns:caldav limit-recurrence-set"`
+	Start   dateWithUTCTime `xml:"start,attr"`
+	End     dateWithUTCTime `xml:"end,attr"`
+}
+
+// https://tools.ietf.org/html/rfc4791#section-9.6.7
+type limitFreeBusySet struct {
+	XMLName xml.Name        `xml:"urn:ietf:params:xml:ns:caldav limit-freebusy-set"`
 	Start   dateWithUTCTime `xml:"start,attr"`
 	End     dateWithUTCTime `xml:"end,attr"`
 }

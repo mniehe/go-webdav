@@ -41,6 +41,10 @@ type calendarCompRequest struct {
 	// their current nor their original time (RFC 4791 §9.6.6). Mutually
 	// exclusive with Expand.
 	LimitRecurrence *calendarTimeWindow
+
+	// LimitFreeBusy, when set, keeps only the FREEBUSY property values that
+	// intersect the window (RFC 4791 §9.6.7).
+	LimitFreeBusy *calendarTimeWindow
 }
 
 // calendarTimeWindow is a [Start, End) window in UTC, with Start always before

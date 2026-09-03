@@ -158,6 +158,13 @@ func shape(obj reportObject, req *calendarCompRequest, budget *expansionBudget) 
 		}
 		shaped = limited
 	}
+	if req.LimitFreeBusy != nil {
+		limited, err := limitFreeBusyCalendar(shaped, req.LimitFreeBusy)
+		if err != nil {
+			return reportObject{}, err
+		}
+		shaped = limited
+	}
 	obj.data = projectCalendar(shaped, req)
 	return obj, nil
 }

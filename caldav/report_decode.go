@@ -200,5 +200,13 @@ func decodeCalendarDataReq(calendarData *calendarDataReq) (*calendarCompRequest,
 		}
 		req.LimitRecurrence = window
 	}
+
+	if calendarData.LimitFreeBusySet != nil {
+		window, err := decodeWindow("limit-freebusy-set", calendarData.LimitFreeBusySet.Start, calendarData.LimitFreeBusySet.End)
+		if err != nil {
+			return nil, err
+		}
+		req.LimitFreeBusy = window
+	}
 	return req, nil
 }
