@@ -188,6 +188,89 @@ func TestQueryProjectsRequestedProperties(t *testing.T) {
 	}
 }
 
+// overriddenWeeklyICS is a weekly Monday event with three overridden instances:
+// the 10 Aug occurrence moved within August, the 17 Aug occurrence moved out to
+// December, and the 5 Oct occurrence moved within October.
+const overriddenWeeklyICS = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\n" +
+	"BEGIN:VEVENT\r\nUID:weekly\r\nDTSTAMP:20260801T000000Z\r\n" +
+	"DTSTART:20260803T090000Z\r\nDTEND:20260803T093000Z\r\nRRULE:FREQ=WEEKLY\r\nSUMMARY:Weekly\r\nEND:VEVENT\r\n" +
+	"BEGIN:VEVENT\r\nUID:weekly\r\nRECURRENCE-ID:20260810T090000Z\r\nDTSTAMP:20260801T000000Z\r\n" +
+	"DTSTART:20260810T110000Z\r\nDTEND:20260810T113000Z\r\nSUMMARY:MovedWithinAugust\r\nEND:VEVENT\r\n" +
+	"BEGIN:VEVENT\r\nUID:weekly\r\nRECURRENCE-ID:20260817T090000Z\r\nDTSTAMP:20260801T000000Z\r\n" +
+	"DTSTART:20261201T090000Z\r\nDTEND:20261201T093000Z\r\nSUMMARY:MovedToDecember\r\nEND:VEVENT\r\n" +
+	"BEGIN:VEVENT\r\nUID:weekly\r\nRECURRENCE-ID:20261005T090000Z\r\nDTSTAMP:20260801T000000Z\r\n" +
+	"DTSTART:20261005T110000Z\r\nDTEND:20261005T113000Z\r\nSUMMARY:MovedWithinOctober\r\nEND:VEVENT\r\n" +
+	"END:VCALENDAR\r\n"
+
+func limitRecurrenceQuery(start, end string) string {
+	return `<?xml version="1.0"?>
+<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop>
+    <C:calendar-data>
+      <C:limit-recurrence-set start="` + start + `" end="` + end + `"/>
+    </C:calendar-data>
+  </D:prop>
+  <C:filter><C:comp-filter name="VCALENDAR"/></C:filter>
+</C:calendar-query>`
+}
+
+func TestQueryLimitRecurrenceSetKeepsOnlyImpactingOverrides(t *testing.T) {
+	store := newStore(t)
+	seedRaw(t, store, "alice", "weekly.ics", overriddenWeeklyICS, "weekly")
+	h := handlerFor(t, store, caldav.Config{})
+
+	// RFC 4791 §9.6.6: the master is always returned; an overridden component
+	// only when its current or original time impacts the window.
+	data := reportMS(t, h, "/alice/work/", limitRecurrenceQuery("20260801T000000Z", "20260901T000000Z")).
+		at(t, "/alice/work/weekly.ics").value(t, caldavName("calendar-data"))
+
+	if !strings.Contains(data, "RRULE") {
+		t.Errorf("calendar-data = %q, limit-recurrence-set must keep the master unexpanded", data)
+	}
+	if !strings.Contains(data, "MovedWithinAugust") {
+		t.Errorf("calendar-data = %q, want the override currently inside the window", data)
+	}
+	if !strings.Contains(data, "MovedToDecember") {
+		t.Errorf("calendar-data = %q, want the override whose original time was inside the window", data)
+	}
+	if strings.Contains(data, "MovedWithinOctober") {
+		t.Errorf("calendar-data = %q, an override impacting the window in neither its current nor original time must be dropped", data)
+	}
+}
+
+func TestQueryLimitRecurrenceSetExcludesExpand(t *testing.T) {
+	store := newStore(t)
+	seedRaw(t, store, "alice", "weekly.ics", overriddenWeeklyICS, "weekly")
+	h := handlerFor(t, store, caldav.Config{})
+
+	// RFC 4791 §9.6: calendar-data allows (expand | limit-recurrence-set)?, not
+	// both.
+	body := `<?xml version="1.0"?>
+<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop>
+    <C:calendar-data>
+      <C:expand start="20260801T000000Z" end="20260901T000000Z"/>
+      <C:limit-recurrence-set start="20260801T000000Z" end="20260901T000000Z"/>
+    </C:calendar-data>
+  </D:prop>
+  <C:filter><C:comp-filter name="VCALENDAR"/></C:filter>
+</C:calendar-query>`
+
+	if w := report(t, h, "/alice/work/", body); w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d for expand combined with limit-recurrence-set", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestQueryLimitRecurrenceSetRequiresAnOrderedWindow(t *testing.T) {
+	store := newStore(t)
+	seedRaw(t, store, "alice", "weekly.ics", overriddenWeeklyICS, "weekly")
+	h := handlerFor(t, store, caldav.Config{})
+
+	if w := report(t, h, "/alice/work/", limitRecurrenceQuery("20260901T000000Z", "20260801T000000Z")); w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d for an inverted window", w.Code, http.StatusBadRequest)
+	}
+}
+
 func TestQueryNoValueStripsTheRequestedValue(t *testing.T) {
 	store := newStore(t)
 	seedRaw(t, store, "alice", "august.ics", augustICS, "august")

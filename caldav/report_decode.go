@@ -152,6 +152,20 @@ func decodeExpand(el *expand) (*calendarExpandRequest, error) {
 	return &calendarExpandRequest{Start: start, End: end}, nil
 }
 
+// decodeWindow reads a [start, end) UTC window whose two attributes are both
+// required: a missing one decodes as the zero time, which would otherwise ask
+// for an unbounded window.
+func decodeWindow(element string, rawStart, rawEnd dateWithUTCTime) (*calendarTimeWindow, error) {
+	start, end := time.Time(rawStart), time.Time(rawEnd)
+	if start.IsZero() || end.IsZero() {
+		return nil, internal.HTTPErrorf(http.StatusBadRequest, "caldav: %s requires both a start and an end", element)
+	}
+	if !start.Before(end) {
+		return nil, internal.HTTPErrorf(http.StatusBadRequest, "caldav: %s start must precede end", element)
+	}
+	return &calendarTimeWindow{Start: start, End: end}, nil
+}
+
 func decodeCalendarDataReq(calendarData *calendarDataReq) (*calendarCompRequest, error) {
 	req := &calendarCompRequest{AllProps: true, AllComps: true}
 	if calendarData.Comp != nil {
@@ -173,5 +187,18 @@ func decodeCalendarDataReq(calendarData *calendarDataReq) (*calendarCompRequest,
 		return nil, err
 	}
 	req.Expand = expand
+
+	if calendarData.LimitRecurrenceSet != nil {
+		// RFC 4791 §9.6: calendar-data allows (expand | limit-recurrence-set)?,
+		// never both.
+		if req.Expand != nil {
+			return nil, internal.HTTPErrorf(http.StatusBadRequest, "caldav: expand and limit-recurrence-set are mutually exclusive")
+		}
+		window, err := decodeWindow("limit-recurrence-set", calendarData.LimitRecurrenceSet.Start, calendarData.LimitRecurrenceSet.End)
+		if err != nil {
+			return nil, err
+		}
+		req.LimitRecurrence = window
+	}
 	return req, nil
 }

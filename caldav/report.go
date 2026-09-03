@@ -151,6 +151,13 @@ func shape(obj reportObject, req *calendarCompRequest, budget *expansionBudget) 
 		}
 		shaped = expanded
 	}
+	if req.LimitRecurrence != nil {
+		limited, err := limitRecurrenceCalendar(shaped, req.LimitRecurrence)
+		if err != nil {
+			return reportObject{}, err
+		}
+		shaped = limited
+	}
 	obj.data = projectCalendar(shaped, req)
 	return obj, nil
 }

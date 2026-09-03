@@ -35,6 +35,18 @@ type calendarCompRequest struct {
 	// Expand, when set, asks for recurrence instances within a bounded window
 	// rather than the recurrence rule itself. See CalendarExpandRequest.
 	Expand *calendarExpandRequest
+
+	// LimitRecurrence, when set, keeps the master component and its recurrence
+	// rule but drops overridden instances that impact the window in neither
+	// their current nor their original time (RFC 4791 §9.6.6). Mutually
+	// exclusive with Expand.
+	LimitRecurrence *calendarTimeWindow
+}
+
+// calendarTimeWindow is a [Start, End) window in UTC, with Start always before
+// End: the server rejects a request that omits or inverts either bound.
+type calendarTimeWindow struct {
+	Start, End time.Time
 }
 
 // calendarPropRequest names one property of a calendar-data projection
