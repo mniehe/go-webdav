@@ -675,3 +675,27 @@ func TestReportOnAnAccountIsRefused(t *testing.T) {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusMethodNotAllowed)
 	}
 }
+
+func TestMultigetShapesLikeAQuery(t *testing.T) {
+	h := handlerFor(t, abStore(t), carddav.Config{})
+
+	// Both reports project through the same code, and only addressbook-query
+	// otherwise exercises it.
+	body := `<?xml version="1.0"?>
+<C:addressbook-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav">
+  <D:prop>
+    <C:address-data><C:prop name="FN"/></C:address-data>
+  </D:prop>
+  <D:href>/alice/work/ada.vcf</D:href>
+</C:addressbook-multiget>`
+
+	data := reportMS(t, h, "/alice/work/", body).
+		at(t, "/alice/work/ada.vcf").value(t, carddavName("address-data"))
+
+	if !strings.Contains(data, "FN:Ada Lovelace") {
+		t.Errorf("address-data = %q, want the requested FN", data)
+	}
+	if strings.Contains(data, "EMAIL") {
+		t.Errorf("address-data = %q, multiget must project as a query does", data)
+	}
+}
